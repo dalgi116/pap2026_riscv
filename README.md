@@ -12,7 +12,7 @@ The project assignment requires the following milestones:
 3. Write assembly code that loads two numbers from memory, jumps to a function that calculates the greatest common divisor (GCD), and returns.
 4. Extend the CPU to a pipelined architecture.
 
-*Note: QuestaSim software was used for simulation and verification.*
+*Note: QuestaSim software was used for simulation and verification. If other software is used, changes in `work/` folder are necessary.*
 
 ## Repository Structure
 
@@ -22,6 +22,9 @@ The project assignment requires the following milestones:
 | `tb/` | SystemVerilog testbenches and memory models |
 | `sw/` | Software files and compilation products |
 | `work/` | Simulation and verification workspace |
+
+**Official ISA tests**
+To run ISA tests, firstly install and set up QuestaSim. Then, go to `work/isa_tests/` and run `run_tests.sh`.
 
 ## Instruction Decode Example
 
