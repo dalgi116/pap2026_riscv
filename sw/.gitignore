@@ -1,0 +1,6 @@
+depend
+gcd
+*.dat
+*.decb
+*.o
+*.srec

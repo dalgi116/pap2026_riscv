@@ -27,7 +27,7 @@ module imem # (
     // Address range check
     always @(*) begin
         if (addr >= MEM_DEPTH*4) begin
-            $display("FAIL: Instruction address out of range");
+            $display("FAIL: Instruction address %h out of range.", addr);
         end
     end
 

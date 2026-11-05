@@ -9,7 +9,7 @@ This repository contains a RISC-V processor developed as a school project. The p
 The project assignment requires the following milestones:
 1. Create a single-cycle RISC-V CPU.
 2. Run official RISC-V tests to verify support for the required instructions.
-3. Write assembly code that loads two numbers from memory, jumps to a function that calculates the greatest common divisor (GCD), and returns.
+3. Write assembly code that loads two numbers from memory, jumps to a function that calculates the greatest common divisor (GCD), returns and writes the result to the memory.
 4. Extend the CPU to a pipelined architecture.
 
 *Note: QuestaSim software was used for simulation and verification. If other software is used, changes in `work/` folder are necessary.*
@@ -24,7 +24,10 @@ The project assignment requires the following milestones:
 | `work/` | Simulation and verification workspace |
 
 **Official ISA tests**
-To run ISA tests, firstly install and set up QuestaSim. Then, go to `work/isa_tests/` and run `run_tests.sh`.
+To run ISA tests, firstly install and set up QuestaSim. Then, go to `work/isa_tests/` and run `run_tests.sh`. For every individual test PASS or FAIL is printed.
+
+**GCD tests**
+It is expected that QuestaSim enviroment is already set. To run GCD test, go to `work/gcd/` and run `run_gcd.sh`. The script will compile all the software files inside `sw/` and run a simulation with the compilation products. By default, GCD inputs are 56 and 98 inside `sw/gcd.S`. The `tb/tb_riscv.sv` evaluates whether there is a result 14 in the memory at address 256. If yes, the script prints PASS. Otherwise, it prints FAIL. All the values and addresses can be changed.
 
 ## Instruction Decode Example
 

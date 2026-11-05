@@ -36,6 +36,7 @@ module tb_riscv;
     wire            dwren;      // Data write enable
 
     string fw_file;             // Memory initialization file
+    string test_name;           // Test being run
 
 /*******************************************************************************
 * Submodule Instantiation
@@ -83,13 +84,20 @@ module tb_riscv;
 * Testbench Logic
 ********************************************************************************/
 
+    // Test name parsing
+    initial begin
+        if (!$value$plusargs("TEST=%s", test_name)) begin
+            $display("Warning: +TEST argument missing.");
+        end
+    end
+
     // Memory initialization
     initial begin
         if ($value$plusargs("FIRMWARE=%s", fw_file)) begin
             $readmemh(fw_file, u_imem.mem);
             $readmemh(fw_file, u_dmem.mem);
         end else begin
-            $display("Warning: +FIRMWARE argument missing");
+            $display("Warning: +FIRMWARE argument missing.");
         end
     end
 
@@ -105,20 +113,35 @@ module tb_riscv;
         #(3.5*`CLK_PERIOD);
         rst_n = 1'b1;
         #1000000; // 100 ms
-        $display("TIMEOUT: Ebreak instruction not found.");
+        $display("TIMEOUT: Ebreak/ecall instruction not found.");
         $finish;
     end
 
-    // Ebreak instruction detection
+    // Test completion detection
     always @(posedge clk) begin
-        if (iread == 32'h00000073) begin
-            // Simulation result is saved in the register x10
-            if (uut.u_reg_map.mem[10] == 32'd0) begin
-                $display("PASS");
-            end else begin
-                $display("FAIL");
+        if (test_name == "gcd") begin
+            // Specific test logic for GCD test (Ebreak triggered)
+            if (iread == 32'h00100073) begin
+                // Simulation result is saved in data memory at x10
+                if (u_dmem.mem[256] == 32'd14) begin
+                    $display("PASS");
+                end else begin
+                    $display("FAIL");
+                end
+                $finish;
             end
-            $finish;
+        
+        end else if (test_name == "isa") begin
+            // Specific test logic for ISA tests (Ecall triggered)
+            if (iread == 32'h00000073) begin
+                // Simulation result is saved in the register x10
+                if (uut.u_reg_map.mem[10] == 32'd0) begin
+                    $display("PASS");
+                end else begin
+                    $display("FAIL");
+                end
+                $finish;
+            end
         end
     end
 

@@ -58,7 +58,7 @@ for TESTFILENAME in $TARGETS; do
     TEST_FILE=riscv-tests/isa/$TESTNAME.dat
     
     echo "Executing with memory in $TEST_FILE"
-    RESULT=$(vsim -c -do "run -all; quit -f" qsim.tb_riscv +FIRMWARE=$TEST_FILE)
+    RESULT=$(vsim -c -do "run -all; quit -f" qsim.tb_riscv +FIRMWARE=$TEST_FILE +TEST=isa)
 
     if echo "$RESULT" | grep -q "PASS$"  ; then
         echo "$TESTNAME: PASS"

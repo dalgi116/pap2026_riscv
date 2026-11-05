@@ -26,14 +26,14 @@ module dmem # (
     output wire [31:0]  rdat    // O   32 Read data
 );
 
-    reg  [31:0]   mem     [0:MEM_DEPTH-1];    // Memory array
+    reg  [31:0] mem [0:MEM_DEPTH-1];    // Memory array
     
     assign rdat = mem[addr[31:2]];
 
     // Address range check
     always @(*) begin
-        if (addr >= MEM_DEPTH*4) begin
-            $display("FAIL: Data address out of range");
+        if (wen && (addr >= MEM_DEPTH*4)) begin
+            $display("FAIL: Data address %h out of range.", addr);
         end
     end
     
