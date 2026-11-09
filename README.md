@@ -4,7 +4,7 @@
 
 ## About This Repository
 
-This repository contains a RISC-V processor developed as a school project. The processor implements a mandatory reduced instruction set, specifically supporting the following instructions: `add`, `addi`, `and`, `andi`, `auipc`, `beq`, `blt`, `bne`, `jal`, `jalr`, `lui`, `lw`, `lui`, `or`, `ori`, `sll`, `slli`, `slt`, `srai`, `sub` and `sw`.
+This repository contains a RISC-V processor developed as a school project. The processor implements a mandatory reduced instruction set, specifically supporting the following instructions: `add`, `addi`, `and`, `andi`, `auipc`, `beq`, `blt`, `bne`, `jal`, `jalr`, `lui`, `lw`, `or`, `ori`, `sll`, `slli`, `slt`, `slti`, `sra`, `srai`, `sub` and `sw`.
 
 The project assignment requires the following milestones:
 1. Create a single-cycle RISC-V CPU.

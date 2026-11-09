@@ -16,18 +16,18 @@ module imem # (
     parameter MEM_DEPTH = 8192  // Memory depth
 ) ( 
     // Memory interface
-    input  wire [31:0]  addr,   // I   32 Read instruction address
-    output wire [31:0]  rins    // O   32 Read instruction
+    input  wire [31:0]  iaddr,  // I   32 Read instruction iaddress
+    output wire [31:0]  idata   // O   32 Read instruction
 );
 
-    reg  [31:0]   mem     [0:MEM_DEPTH-1];    // Memory array
+    reg  [31:0] mem [0:MEM_DEPTH-1];    // Memory array
     
-    assign rins = mem[addr[31:2]];
+    assign idata = mem[iaddr[31:2]];
 
-    // Address range check
+    // iaddress range check
     always @(*) begin
-        if (addr >= MEM_DEPTH*4) begin
-            $display("FAIL: Instruction address %h out of range.", addr);
+        if (iaddr >= MEM_DEPTH*4) begin
+            $display("FAIL: Instruction iaddress %h out of range.", iaddr);
         end
     end
 

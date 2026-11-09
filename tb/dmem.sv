@@ -15,32 +15,33 @@
 module dmem # (
     parameter MEM_DEPTH = 8192  // Memory depth
 ) (
-    // Control signals
-    input  wire         clk,    // I    1 Rising-edge active system clock
-    input  wire         rst_n,  // I    1 Active-low system reset
-    input  wire         wen,    // I    1 Write enable
+    // Clock, reset
+    input  wire         clk,    // I    1 Clock
+    input  wire         rst_n,  // I    1 Acitve-low reset
     
-    // Memory interface
-    input  wire [31:0]  addr,   // I   32 Read/Write data address
-    input  wire [31:0]  wdat,   // I   32 Write data
-    output wire [31:0]  rdat    // O   32 Read data
+    // Data interface
+    input  wire [31:0]  daddr,  // I   32 Address
+    input  wire [31:0]  dwdata, // I   32 Write data
+    input  wire         dwstrb, // I    1 Write enable
+    output wire [31:0]  drdata, // O   32 Read data
+    input  wire         dread   // I    1 Write strobe
 );
 
     reg  [31:0] mem [0:MEM_DEPTH-1];    // Memory array
     
-    assign rdat = mem[addr[31:2]];
+    assign drdata = mem[daddr[31:2]];
 
     // Address range check
     always @(*) begin
-        if (wen && (addr >= MEM_DEPTH*4)) begin
-            $display("FAIL: Data address %h out of range.", addr);
+        if (dwstrb && (daddr >= MEM_DEPTH*4)) begin
+            $display("FAIL: Data daddress %h out of range.", daddr);
         end
     end
     
-    // Data write
+    // Data write control
     always @(posedge clk) begin
-        if (wen) begin
-            mem[addr[31:2]] <= wdat;
+        if (dwstrb) begin
+            mem[daddr[31:2]] <= dwdata;
         end
     end
  

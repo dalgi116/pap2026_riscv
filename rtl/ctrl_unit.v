@@ -11,154 +11,178 @@
  *
  *******************************************************************************/
 
-module ctrl_unit (
+module ctrl_unit # (
+    // Instruction format encoding
+    parameter FMT_I = 3'b000,   //  I-type
+    parameter FMT_S = 3'b001,   //  S-type
+    parameter FMT_B = 3'b010,   // SB-type
+    parameter FMT_U = 3'b011,   //  U-type
+    parameter FMT_J = 3'b100,   // UJ-type
+    parameter FMT_R = 3'b101    //  R-type
+) (
     // Input interface
-    input  wire [6:0]   opcode,     // I    7 Operation code
-    input  wire [2:0]   funct3,     // I    3 Function code 3
-    input  wire [6:0]   funct7,     // I    6 Function code 7
-    input  wire         aluzero,    // I    1 ALU zero flag
+    input  wire [31:0]  idata,      // I   32 Read instruction
     
     // Output interface
-    output reg          pcsrc,      // O    1 Instruction address select
-    output reg          pcsrc_jalr, // O    1 JALR jump flag
-    output reg          mem2reg,    // O    1 Register map WD3 select
-    output reg          alusrc,     // O    1 ALU SrcB select
     output reg          regwrite,   // O    1 Register map WE3
+    output reg          memtoreg,   // O    1 Register map WD3 select
     output reg          memwrite,   // O    1 Data memory write enable
-    output reg  [2:0]   immsrc,     // O    3 Immediate source select
-    output reg  [2:0]   aluctrl     // O    3 Combinational ALU control vector
+    output reg          memread,    // O    1 Data memory read enable
+    output reg          bbxx,       // O    1 Branch if condition is met
+    output reg          bjal,       // O    1 JAL instruction
+    output reg          bjalr,      // O    1 JALR instruction
+    output reg          bval,       // O    1 Branch condition if ALU result is zero
+    output reg  [2:0]   aluctrl,    // O    3 ALU control
+    output reg          alusrc,     // O    1 ALU SrcB select
+    output reg          auipc,      // O    1 AUIPC instruction
+    output reg  [2:0]   format      // O    3 Instruction format
 );
 
-    // Immediate source select encoding
-    localparam IMM_I = 3'b000;
-    localparam IMM_S = 3'b001;
-    localparam IMM_B = 3'b010;
-    localparam IMM_U = 3'b011;
-    localparam IMM_J = 3'b100;
+    /***************************************************************************
+    * Signal declaration
+    ****************************************************************************/
+
+    // Instruction fields
+    wire [6:0] opcode;  // Instruction opcode
+    wire [2:0] funct3;  // Instruction funct3
+    wire [6:0] funct7;  // Instruction funct7
+
+    /***************************************************************************
+    * Combinational logic
+    ****************************************************************************/
+    
+    // Instruction decode
+    assign opcode = idata[6:0];
+    assign funct3 = idata[14:12];
+    assign funct7 = idata[31:25];
 
     // Main decoder
     always @(*) begin
-        pcsrc      = 1'b0;
-        pcsrc_jalr = 1'b0;
-        mem2reg    = 1'b0;
-        alusrc     = 1'b0;
-        regwrite   = 1'b0;
-        memwrite   = 1'b0;
-        immsrc     = IMM_I;
-        aluctrl    = 3'b000;
+        // Default values
+        regwrite = 1'b0;
+        memtoreg = 1'b0;
+        memwrite = 1'b0;
+        memread  = 1'b0;
+        bbxx     = 1'b0;
+        bjal     = 1'b0;
+        bjalr    = 1'b0;
+        bval     = 1'b0;
+        alusrc   = 1'b0;
+        auipc    = 1'b0;
+        format   = FMT_I;
 
         case (opcode)
-            // LUI (Load Upper Immediate)
-            7'b0110111: begin
-                regwrite = 1'b1;
-                immsrc   = IMM_U;
-                alusrc   = 1'b1;
-                aluctrl  = 3'b100;
-            end
-            
             // AUIPC (Add Upper Immediate to PC)
             7'b0010111: begin
                 regwrite = 1'b1;
-                immsrc   = IMM_U;
-                alusrc   = 1'b1; 
-                aluctrl  = 3'b000;
+                alusrc   = 1'b1;
+                auipc    = 1'b1;
+                format   = FMT_U;
             end
-
+            // LUI (Load Upper Immediate)
+            7'b0110111: begin
+                regwrite = 1'b1;
+                alusrc   = 1'b1;
+                format   = FMT_U;
+            end            
+            // SW (Store Word)
+            7'b0100011: begin
+                memwrite = 1'b1;
+                alusrc   = 1'b1;
+                format   = FMT_S;
+            end
             // JAL (Jump and Link)
             7'b1101111: begin
                 regwrite = 1'b1;
-                immsrc   = IMM_J;
-                pcsrc    = 1'b1;
+                bjal     = 1'b1;
+                format   = FMT_J;
             end
-
             // JALR (Jump and Link Register)
             7'b1100111: begin
-                regwrite   = 1'b1;
-                immsrc     = IMM_I;
-                pcsrc_jalr = 1'b1;
-                aluctrl    = 3'b000;
-            end
-
-            // Branches or jumps (B-Type)
-            7'b1100011: begin
-                immsrc = IMM_B;
-                case (funct3)
-                    3'b000: begin
-                        pcsrc   = aluzero;  // BEQ
-                        aluctrl = 3'b001;
-                    end
-                    3'b001: begin
-                        pcsrc   = ~aluzero; // BNE
-                        aluctrl = 3'b001;
-                    end
-                    3'b100: begin
-                        pcsrc   = ~aluzero; // BLT
-                        aluctrl = 3'b010;
-                    end
-                    default: begin
-                        pcsrc = 1'b0;
-                    end
-                endcase
-            end
-
-            // Memory load (Load / I-Type)
-            7'b0000011: begin
-                // LW
                 regwrite = 1'b1;
-                mem2reg  = 1'b1;
+                bjalr    = 1'b1;
                 alusrc   = 1'b1;
-                immsrc   = IMM_I;
-                aluctrl  = 3'b000;
+                format   = FMT_I;
             end
-
-            // Memory store (Store / S-Type)
-            7'b0100011: begin
-                // SW
-                memwrite = 1'b1;
+            // LW (Load Word)
+            7'b0000011: begin
+                regwrite = 1'b1;
+                memtoreg = 1'b1;
+                memread  = 1'b1;
                 alusrc   = 1'b1;
-                immsrc   = IMM_S;
-                aluctrl  = 3'b000;
+                format   = FMT_I;
             end
-
-            // Arithmetic and logic with Immediate (I-Type)
+            // Branches (SB-Type)
+            7'b1100011: begin
+                bbxx   = 1'b1;
+                format = FMT_B;
+            end
+            // Arithmetic with Immediate (I-Type)
             7'b0010011: begin
                 regwrite = 1'b1;
                 alusrc   = 1'b1;
-                immsrc   = IMM_I;
-                case (funct3)
-                    3'b000: aluctrl = 3'b000; // ADDI
-                    3'b001: aluctrl = 3'b011; // SLLI
-                    3'b101: begin
-                        if (funct7 == 7'b0100000) begin
-                            aluctrl = 3'b111; // SRAI
-                        end
-                    end
-                    3'b110: aluctrl = 3'b110; // ORI
-                    3'b111: aluctrl = 3'b101; // ANDI
-                    default: aluctrl = 3'b000;
-                endcase
+                format   = FMT_I;
             end
-
-            // Arithmetic and logic operations between registers (R-Type)
+            // Arithmetic between registers (R-Type)
             7'b0110011: begin
                 regwrite = 1'b1;
+                format   = FMT_R;
+            end
+        endcase
+    end
+
+    // ALU decoder
+    always @(*) begin
+        // Default values
+        aluctrl = 3'b000;
+        bval    = 1'b0;
+
+        case (format)
+            FMT_B: begin    // SB-Type
                 case (funct3)
-                    3'b000: begin
-                        if (funct7 == 7'b0100000) 
-                            aluctrl = 3'b001; // SUB
-                        else 
-                            aluctrl = 3'b000; // ADD
-                    end
-                    3'b001: aluctrl = 3'b011; // SLL
-                    3'b010: aluctrl = 3'b010; // SLT
-                    3'b110: aluctrl = 3'b110; // OR
-                    3'b111: aluctrl = 3'b101; // AND
-                    default: aluctrl = 3'b000;
+                    3'b000: begin   // BEQ
+                        aluctrl = 3'b001;
+                        bval    = 1'b1;
+                    end 
+                    3'b001: aluctrl = 3'b001;   // BNE
+                    3'b100: aluctrl = 3'b010;   // BLT
                 endcase
             end
-
-            default: begin
-                // Above
+            FMT_R: begin    // R-Type
+                case (funct3)
+                    3'b000: aluctrl = (funct7 == 7'b0100000) ? 3'b001 : 3'b000; // SUB : ADD
+                    3'b001: aluctrl = 3'b011;   // SLL
+                    3'b010: aluctrl = 3'b010;   // SLT
+                    3'b101: aluctrl = 3'b111;   // SRA
+                    3'b110: aluctrl = 3'b110;   // OR
+                    3'b111: aluctrl = 3'b101;   // AND
+                endcase
+            end
+            FMT_I: begin    // I-Type
+                if (opcode == 7'b0000011) begin
+                    aluctrl = 3'b000; // LW requires ADD for address calculation
+                end else begin
+                    case (funct3)
+                        3'b000: aluctrl = 3'b000; // ADDI
+                        3'b001: aluctrl = 3'b011; // SLLI
+                        3'b010: aluctrl = 3'b010; // SLTI
+                        3'b101: aluctrl = 3'b111; // SRAI
+                        3'b110: aluctrl = 3'b110; // ORI
+                        3'b111: aluctrl = 3'b101; // ANDI
+                    endcase
+                end
+            end
+            FMT_U: begin   // U-Type
+                if (opcode == 7'b0110111) begin
+                    aluctrl = 3'b100; // LUI
+                end else begin
+                    aluctrl = 3'b000; // AUIPC
+                end
+            end
+            default: begin 
+                // SW, JALR
+                // All of these require basic addition (rs1+imm or pc+imm)
+                aluctrl = 3'b000; 
             end
         endcase
     end

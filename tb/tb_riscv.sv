@@ -17,72 +17,74 @@
 
 module tb_riscv;
 
-/*******************************************************************************
-* Signal Declaration
-********************************************************************************/
+    /***************************************************************************
+    * Signal Declaration
+    ****************************************************************************/
 
-    // Control signals
-    reg             clk;        // Rising-edge active system clock
-    reg             rst_n;      // Active-low system reset
+    // System clock and reset
+    reg  clk;        // Clock
+    reg  rst_n;      // Acitve-low reset
 
-    // Instruction Interface
-    wire [31:0]     iaddr;      // Instruction address
-    wire [31:0]     iread;      // Read instruction
+    // Instruction interface
+    wire [31:0] iaddr;  // Instruction address
+    wire [31:0] idata;  // Read instruction
 
-    // Data Interface
-    wire [31:0]     daddr;      // Read/Write data address
-    wire [31:0]     dread;      // Read data
-    wire [31:0]     dwrite;     // Write data
-    wire            dwren;      // Data write enable
+    // Data interface
+    wire [31:0] daddr;  // Read/Write data address
+    wire [31:0] drdata; // Read data
+    wire [31:0] dwdata; // Write data
+    wire        dwstrb; // Data write enable
 
-    string fw_file;             // Memory initialization file
-    string test_name;           // Test being run
+    string fw_file;     // Memory initialization file
+    string test_name;   // Test being run
 
-/*******************************************************************************
-* Submodule Instantiation
-********************************************************************************/
+    /***************************************************************************
+    * Submodule Instantiation
+    ****************************************************************************/
 
-    riscv uut (
+    riscv u_riscv (
         // Control signals
-        .clk        (clk        ),      // I    1 Rising-edge active system clock
-        .rst_n      (rst_n      ),      // I    1 Active-low system reset
+        .clk    (clk    ),  // I    1 Clock
+        .rst_n  (rst_n  ),  // I    1 Acitve-low reset
 
         // Instrunction interface
-        .iaddr      (iaddr      ),      // O    32 Instruction address
-        .iread      (iread      ),      // I    32 Read instruction
+        .iaddr  (iaddr  ),  // O   32 Instruction address
+        .idata  (idata  ),  // I   32 Read instruction
 
         // Data interface
-        .daddr      (daddr      ),      // O    32 Read/Write data address
-        .dread      (dread      ),      // I    32 Read data
-        .dwrite     (dwrite     ),      // O    32 Write data
-        .dwren      (dwren      )       // O     1 Data write enable
+        .daddr  (daddr  ),  // O   32 Data address
+        .dwdata (dwdata ),  // O   32 Write data
+        .dwstrb (dwstrb ),  // O    1 Write strobe
+        .drdata (drdata ),  // I   32 Read data
+        .dread  (dread  )   // O    1 Read strobe
     );
 
     imem # (
-        .MEM_DEPTH  (8192       )       // Memory depth
+        .MEM_DEPTH  (8192   )   // Memory depth
     ) u_imem (
         // Memory interface
-        .addr       (iaddr      ),      // I   32 Read instruction address
-        .rins       (iread      )       // O   32 Read instruction
+        .iaddr      (iaddr  ),  // I   32 Instruction address
+        .idata      (idata  )   // O   32 Read instruction
     );
 
     dmem # (
-        .MEM_DEPTH  (8192       )       // Memory depth
+        .MEM_DEPTH  (8192   )   // Memory depth
     ) u_dmem (
-        // Control signals
-        .clk        (clk        ),      // I    1 Rising-edge active system clock
-        .rst_n      (rst_n      ),      // I    1 Active-low system reset
-        .wen        (dwren      ),      // I    1 Write enable
+        // Clock, reset
+        .clk        (clk    ),  // I    1 Clock
+        .rst_n      (rst_n  ),  // I    1 Acitve-low reset
         
         // Memory interface
-        .addr       (daddr      ),      // I   32 Read/Write data address
-        .wdat       (dwrite     ),      // I   32 Write data
-        .rdat       (dread      )       // O   32 Read data
+        .daddr      (daddr  ),  // I   32 Data address
+        .dwdata     (dwdata ),  // I   32 Write data
+        .dwstrb     (dwstrb ),  // I    1 Write strobe
+        .drdata     (drdata ),  // O   32 Read data
+        .dread      (dread  )   // I    1 Read strobe
     );
 
-/*******************************************************************************
-* Testbench Logic
-********************************************************************************/
+    /***************************************************************************
+    * Testbench Logic
+    ****************************************************************************/
 
     // Test name parsing
     initial begin
@@ -119,9 +121,10 @@ module tb_riscv;
 
     // Test completion detection
     always @(posedge clk) begin
+
         if (test_name == "gcd") begin
             // Specific test logic for GCD test (Ebreak triggered)
-            if (iread == 32'h00100073) begin
+            if (idata == 32'h00100073) begin
                 // Simulation result is saved in data memory at x10
                 if (u_dmem.mem[256] == 32'd14) begin
                     $display("PASS");
@@ -133,9 +136,9 @@ module tb_riscv;
         
         end else if (test_name == "isa") begin
             // Specific test logic for ISA tests (Ecall triggered)
-            if (iread == 32'h00000073) begin
+            if (idata == 32'h00000073) begin
                 // Simulation result is saved in the register x10
-                if (uut.u_reg_map.mem[10] == 32'd0) begin
+                if (u_riscv.u_riscv_id.u_reg_map.mem[10] == 32'd0) begin
                     $display("PASS");
                 end else begin
                     $display("FAIL");

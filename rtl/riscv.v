@@ -13,164 +13,182 @@
 
 module riscv (
     // Control signals
-    input  wire         clk,        // I    1 Rising-edge active system clock
-    input  wire         rst_n,      // I    1 Active-low system reset
+    input  wire         clk,    // I    1 Clock
+    input  wire         rst_n,  // I    1 Acitve-low reset
 
     // Instrunction interface
-    output wire [31:0]  iaddr,      // O   32 Instruction address
-    input  wire [31:0]  iread,      // I   32 Read instruction
+    output wire [31:0]  iaddr,  // O   32 Instruction address
+    input  wire [31:0]  idata,  // I   32 Read instruction
 
     // Data interface
-    output wire [31:0]  daddr,      // O   32 Read/Write data address
-    input  wire [31:0]  dread,      // I   32 Read data
-    output wire [31:0]  dwrite,     // O   32 Write data
-    output wire         dwren       // O    1 Data write enable
+    output wire [31:0]  daddr,  // O   32 Data address
+    output wire [31:0]  dwdata, // O   32 Write data
+    output wire         dwstrb, // O    1 Write strobe
+    input  wire [31:0]  drdata, // I   32 Read data
+    input  wire         dread   // I    1 Read strobe
 );
 
-    localparam PC_INIT_VAL = 32'h0000_0000;     // Initial value of Program Counter
+    localparam PC_INIT_VAL = 32'h0000_0000; // Initial value of Program Counter
 
-/*******************************************************************************
-* Signal Declaration
-********************************************************************************/
+    /***************************************************************************
+    * Signal Declaration
+    ****************************************************************************/
 
-    // Program Counter signals
-    reg  [31:0]     pc;             // Program Counter register
-    wire [31:0]     pcplus4;        // Program Counter incremented by 4
-    wire [31:0]     pcbranch;       // Program Counter branch
-    wire [31:0]     pcnext;         // Next Program Counter value
+    // Registers
+    reg  [31:0] pc_reg; // Program Counter register
 
-    // Register Map
-    wire [4:0]      rm_a1;          // Port 1 address
-    wire [4:0]      rm_a2;          // Port 2 address
-    wire [4:0]      rm_a3;          // Port 3 address
-    wire [31:0]     rm_rd1;         // Port 1 read data
-    wire [31:0]     rm_rd2;         // Port 2 read data
-    wire [31:0]     rm_wd3;         // Port 3 write data
+    // Intermediate signals
+    wire [31:0] pcplus4;    // Program Counter plus 4
+    wire [4:0]  destreg;    // Destination register address
+    wire [31:0] RD1;        // Register read port 1 data
+    wire [31:0] RD2;        // Register read port 2 data
+    wire [31:0] immval;     // Immediate value
+    wire        regwrite;   // Output Register map WE3
+    wire        memtoreg;   // Register map WD3 select
+    wire        memwrite;   // Data memory write enable
+    wire        memread;    // Data memory read enable
+    wire        bbxx;       // Branch if condition is met
+    wire        bjal;       // JAL instruction
+    wire        bjalr;      // JALR instruction
+    wire        bval;       // Branch condition if ALU result is zero
+    wire [2:0]  aluctrl;    // ALU control
+    wire        alusrc;     // ALU SrcB select
+    wire        auipc;      // AUIPC instruction
+    wire        aluzero;    // ALU result is zero
+    wire [31:0] alures;     // ALU result
+    wire [31:0] pcplusimm;  // Program Counter plus immediate value
+    wire        boutcome;   // Branch outcome
+    wire [31:0] btarget;    // Branch target address
+    wire [31:0] WD3_ap;     // Register write data (alures or pclus4)
+    wire [31:0] WD3_apr;    // Register write data (alures or pclus4 or read data from memory)
+    wire [31:0] pc_nxt;     // Program Counter next value
 
-    // ALU
-    wire [31:0]     alu_srcA;       // Source port A
-    wire [31:0]     alu_srcB;       // Source port B
-    wire [31:0]     alu_res;        // Result port
-    wire            alu_zero;       // Zero flag
 
-    // Control Unit
-    wire [6:0]      cr_opcode;      // Operation code
-    wire [2:0]      cr_funct3;      // Function code 3
-    wire [6:0]      cr_funct7;      // Function code 7
-    wire            cr_pcsrc;       // Instruction address select
-    wire            cr_pcsrc_jalr;  // JALR instruction address select
-    wire            cr_mem2reg;     // Register map WD3 select
-    wire            cr_alusrc;      // ALU SrcB select
-    wire            cr_regwrite;    // Register map WE3
-    wire            cr_memwrite;    // Data memory write enable
-    wire [2:0]      cr_immsrc;      // Immediate source select
-    wire [2:0]      cr_aluctrl;     // ALU control vector
+    /***************************************************************************
+    * Combinational Logic
+    ****************************************************************************/
 
-    reg  [31:0]     imm_val;        // Immediate value
-    wire            is_auipc;       // AUIPC instruction flag
+    // Instruction interface
+    assign iaddr  = pc_reg;
 
-/*******************************************************************************
-* Combinational Logic
-********************************************************************************/
-    
-    // Immediate value generation
-    always @(*) begin
-        case (cr_immsrc)
-            3'b000: imm_val = {{20{iread[31]}}, iread[31:20]};                                  // I-type
-            3'b001: imm_val = {{20{iread[31]}}, iread[31:25], iread[11:7]};                     // S-type
-            3'b010: imm_val = {{20{iread[31]}}, iread[7], iread[30:25], iread[11:8], 1'b0};     // B-type
-            3'b011: imm_val = {iread[31:12], 12'b0};                                            // U-type
-            3'b100: imm_val = {{12{iread[31]}}, iread[19:12], iread[20], iread[30:21], 1'b0};   // J-type
-            default: imm_val = 32'd0;
-        endcase
-    end
+    // Data interface
+    assign daddr  = alures;
+    assign dwdata = RD2;
+    assign dwstrb = memwrite;
+    assign dread  = memread;
+
+    /***************************************************************************
+    * Sequential Logic
+    ****************************************************************************/
 
     // Program Counter logic
-    assign pcplus4  = pc + 32'd4;
-    assign pcbranch = pc + imm_val;
-    assign pcnext = cr_pcsrc_jalr ? (rm_rd1 + imm_val) : (cr_pcsrc ? pcbranch : pcplus4);
-
-    // Instruction decode
-    assign cr_opcode = iread[6:0];
-    assign cr_funct3 = iread[14:12];
-    assign cr_funct7 = iread[31:25];
-
-    // Register Map mapping
-    assign rm_a1  = iread[19:15];
-    assign rm_a2  = iread[24:20];
-    assign rm_a3  = iread[11:7];
-    
-    // Write data mux (JAL/JALR save PC+4)
-    assign rm_wd3 = (cr_pcsrc | cr_pcsrc_jalr) ? pcplus4 : (cr_mem2reg ? dread : alu_res);
-
-    // ALU mux
-    assign is_auipc = (cr_opcode == 7'b0010111);
-    assign alu_srcA = is_auipc ? pc : rm_rd1;
-    assign alu_srcB = cr_alusrc ? imm_val : rm_rd2;
-
-    // External Assignments
-    assign iaddr  = pc;
-    assign daddr  = alu_res;
-    assign dwrite = rm_rd2;
-    assign dwren  = cr_memwrite;
-
-/*******************************************************************************
-* Sequential Logic
-********************************************************************************/
-
-    // Program Counter Assignment
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            pc <= PC_INIT_VAL;
+            pc_reg <= PC_INIT_VAL;
         end else begin
-            pc <= pcnext;
+            pc_reg <= pc_nxt;
         end
-    end
+    end    
 
-/*******************************************************************************
-* Submodule Instantiation
-********************************************************************************/
+    /***************************************************************************
+    * Submodule Instantiation
+    ****************************************************************************/
 
-    reg_map u_reg_map (
+    // Instruction fetch
+    riscv_if u_riscv_if (
+        // Program Counter interface
+        .pc         (pc_reg ),  // I   32 Program Counter
+        .pcplus4    (pcplus4)   // O   32 Program counter plus 4
+    );
+
+    // Instruction decode
+    riscv_id u_riscv_id (
         // Clock, reset
-        .clk        (clk        ),  // I    1 Rising-edge active system clock
-        .rst_n      (rst_n      ),  // I    1 Active-low system reset
+        .clk        (clk        ),  // I    1 Clock
+        .rst_n      (rst_n      ),  // I    1 Active-low reset
 
-        // Data interface
-        .A1         (rm_a1      ),  // I    5 Port 1 address
-        .A2         (rm_a2      ),  // I    5 Port 2 address
-        .A3         (rm_a3      ),  // I    5 Port 3 address
-        .RD1        (rm_rd1     ),  // O   32 Port 1 read data
-        .RD2        (rm_rd2     ),  // O   32 Port 2 read data
-        .WD3        (rm_wd3     ),  // I   32 Port 3 write data
-        .WE3        (cr_regwrite)   // I    1 Port 3 write enable
+        // Instruction interface
+        .idata      (idata      ),  // I   32 Read instruction
+
+        // Register write interface
+        .A3         (destreg    ),  // I    5 Register write address
+        .WD3        (WD3_apr    ),  // I   32 Register write data
+        .WE3        (regwrite   ),  // I    1 Register write enable
+
+        // Data output interface
+        .destreg    (destreg    ),  // O    5 Destination register address
+        .RD1        (RD1        ),  // O   32 Register read port 1 data
+        .RD2        (RD2        ),  // O   32 Register read port 2 data
+        .immval     (immval     ),  // O   32 Immediate value
+
+        // Control signals
+        .regwrite   (regwrite   ),  // O    1 Output Register map WE3
+        .memtoreg   (memtoreg   ),  // O    1 Register map WD3 select
+        .memwrite   (memwrite   ),  // O    1 Data memory write enable
+        .memread    (memread    ),  // O    1 Data memory read enable
+        .bbxx       (bbxx       ),  // O    1 Branch if condition is met
+        .bjal       (bjal       ),  // O    1 JAL instruction
+        .bjalr      (bjalr      ),  // O    1 JALR instruction
+        .bval       (bval       ),  // O    1 Branch condition if ALU result is zero
+        .aluctrl    (aluctrl    ),  // O    3 ALU control
+        .alusrc     (alusrc     ),  // O    1 ALU SrcB select
+        .auipc      (auipc      )   // O    1 JALR instruction address select
     );
 
-    alu u_alu (
-        // ALU interface
-        .ctrl       (cr_aluctrl ),  // I    3 Control vector
-        .srcA       (alu_srcA   ),  // I   32 Source port A
-        .srcB       (alu_srcB   ),  // I   32 Source port B
-        .res        (alu_res    ),  // O   32 Result port
-        .zero       (alu_zero   )   // O    1 Zero flag
+    // Execute stage
+    riscv_ex u_riscv_ex (
+        // Control signals
+        .aluctrl    (aluctrl    ),  // I    3 ALU control
+        .alusrc     (alusrc     ),  // I    1 ALU SrcB select
+        .auipc      (auipc      ),  // I    1 AUIPC instruction
+
+        // Data input interface
+        .pc         (pc_reg     ),  // I   32 Program Counter value
+        .RD1        (RD1        ),  // I   32 Register read port 1 data
+        .RD2        (RD2        ),  // I   32 Register read port 2 data
+        .immval     (immval     ),  // I   32 Immediate value
+
+        // Data output interface
+        .aluzero    (aluzero    ),  // O    1 ALU result is zero
+        .alures     (alures     ),  // O   32 ALU result
+        .pcplusimm  (pcplusimm  )   // O   32 Program Counter plus immediate value
     );
 
-    ctrl_unit u_ctrl_unit (
-        // Input interface
-        .opcode     (cr_opcode      ),  // I    7 Operation code
-        .funct3     (cr_funct3      ),  // I    3 Function code 3
-        .funct7     (cr_funct7      ),  // I    7 Function code 7
-        .aluzero    (alu_zero       ),  // I    1 ALU zero flag
+    // Memory write/read stage
+    riscv_mem u_riscv_mem (
+        // Control signals
+        .bbxx       (bbxx       ),  // I    1 Branch if condition is met
+        .bjal       (bjal       ),  // I    1 JAL instruction
+        .bjalr      (bjalr      ),  // I    1 JALR instruction
+        .bval       (bval       ),  // I    1 Branch condition if ALU result is zero
+        .aluzero    (aluzero    ),  // I    1 ALU result is zero
+
+        // Data input interface
+        .alures     (alures     ),  // I   32 ALU result
+        .pcplusimm  (pcplusimm  ),  // I   32 Program Counter plus immediate value
+        .pcplus4    (pcplus4    ),  // I   32 Program counter plus 4
         
         // Output interface
-        .pcsrc      (cr_pcsrc       ),  // O    1 Instruction address select
-        .pcsrc_jalr (cr_pcsrc_jalr  ),  // O    1 JALR instruction address select
-        .mem2reg    (cr_mem2reg     ),  // O    1 Register map WD3 select
-        .alusrc     (cr_alusrc      ),  // O    1 ALU SrcB select
-        .regwrite   (cr_regwrite    ),  // O    1 Register map WE3
-        .memwrite   (cr_memwrite    ),  // O    1 Data memory write enable
-        .immsrc     (cr_immsrc      ),  // O    3 Immediate source select
-        .aluctrl    (cr_aluctrl     )   // O    3 Combinational ALU control vector
+        .boutcome   (boutcome   ),  // O    1 Branch outcome
+        .btarget    (btarget    ),  // O   32 Branch target address
+        .WD3_ap     (WD3_ap     )   // O   32 Register write data (alures or pclus4)
+    );
+
+    // Write back stage
+    riscv_wb u_riscv_wb (
+        // Control signal
+        .boutcome   (boutcome   ),  // I    1 Branch outcome
+        .memtoreg   (memtoreg   ),  // I    1 Register map WD3 select
+        
+        // Input data interface
+        .drdata     (drdata     ),  // I   32 Read data from memory
+        .WD3_ap     (WD3_ap     ),  // I   32 Register write data (alures or pclus4)
+        .btarget    (btarget    ),  // I   32 Branch target address
+        .pcplus4    (pcplus4    ),  // I   32 Program counter plus 4
+        
+        // Output data interface
+        .WD3_apr    (WD3_apr    ),  // O   32 Register write data (alures or pclus4 or read data from memory)
+        .pc_nxt     (pc_nxt     )   // O   32 Program Counter next value
     );
 
 endmodule

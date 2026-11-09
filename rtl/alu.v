@@ -13,15 +13,20 @@
 
 module alu (
     // ALU interface
-    input  wire [2:0]   ctrl,   // I    3 Control vector
+    input  wire [2:0]   ctrl,   // I    3 ALU control
     input  wire [31:0]  srcA,   // I   32 Source port A
     input  wire [31:0]  srcB,   // I   32 Source port B
     output reg  [31:0]  res,    // O   32 Result port
     output wire         zero    // O    1 Zero flag
 );
 
+    /***************************************************************************
+    * Combinational logic
+    ****************************************************************************/
+
     assign zero = (res == 32'd0);
 
+    // ALU operation
     always @(*) begin
         case (ctrl)
             3'b000: begin
