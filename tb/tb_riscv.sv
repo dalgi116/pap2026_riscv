@@ -124,8 +124,8 @@ module tb_riscv;
 
         if (test_name == "gcd") begin
             // Specific test logic for GCD test (Ebreak triggered)
-            if (idata == 32'h00100073) begin
-                // Simulation result is saved in data memory at x10
+            if (u_riscv.u_riscv_id.u_ctrl_unit.isebreak) begin
+                // Simulation result is saved in data memory at word address 256
                 if (u_dmem.mem[256] == 32'd14) begin
                     $display("PASS");
                 end else begin
@@ -136,7 +136,7 @@ module tb_riscv;
         
         end else if (test_name == "isa") begin
             // Specific test logic for ISA tests (Ecall triggered)
-            if (idata == 32'h00000073) begin
+            if (u_riscv.u_riscv_id.u_ctrl_unit.isecall) begin
                 // Simulation result is saved in the register x10
                 if (u_riscv.u_riscv_id.u_reg_map.mem[10] == 32'd0) begin
                     $display("PASS");

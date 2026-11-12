@@ -47,6 +47,12 @@ module ctrl_unit # (
     wire [2:0] funct3;  // Instruction funct3
     wire [6:0] funct7;  // Instruction funct7
 
+    // Custom instruction flags
+    reg  islui;     // LUI instruction
+    reg  islw;      // LW instruction
+    reg  isebreak;  // Ebreak instruction
+    reg  isecall;   // Ecall instruction
+
     /***************************************************************************
     * Combinational logic
     ****************************************************************************/
@@ -70,6 +76,10 @@ module ctrl_unit # (
         alusrc   = 1'b0;
         auipc    = 1'b0;
         format   = FMT_I;
+        islui    = 1'b0;
+        islw     = 1'b0;
+        isebreak = 1'b0;
+        isecall  = 1'b0;
 
         case (opcode)
             // AUIPC (Add Upper Immediate to PC)
@@ -84,6 +94,7 @@ module ctrl_unit # (
                 regwrite = 1'b1;
                 alusrc   = 1'b1;
                 format   = FMT_U;
+                islui    = 1'b1;
             end            
             // SW (Store Word)
             7'b0100011: begin
@@ -111,6 +122,7 @@ module ctrl_unit # (
                 memread  = 1'b1;
                 alusrc   = 1'b1;
                 format   = FMT_I;
+                islw     = 1'b1;
             end
             // Branches (SB-Type)
             7'b1100011: begin
@@ -127,6 +139,16 @@ module ctrl_unit # (
             7'b0110011: begin
                 regwrite = 1'b1;
                 format   = FMT_R;
+            end
+            // CSR instructions
+            7'b1110011: begin
+                if (funct3 == 3'b000) begin
+                    if (idata[31:20] == 12'b000000000000) begin
+                        isecall = 1'b1;
+                    end else if (idata[31:20] == 12'b000000000001) begin
+                        isebreak = 1'b1;
+                    end
+                end
             end
         endcase
     end
@@ -159,7 +181,7 @@ module ctrl_unit # (
                 endcase
             end
             FMT_I: begin    // I-Type
-                if (opcode == 7'b0000011) begin
+                if (islw) begin
                     aluctrl = 3'b000; // LW requires ADD for address calculation
                 end else begin
                     case (funct3)
@@ -173,7 +195,7 @@ module ctrl_unit # (
                 end
             end
             FMT_U: begin   // U-Type
-                if (opcode == 7'b0110111) begin
+                if (islui) begin
                     aluctrl = 3'b100; // LUI
                 end else begin
                     aluctrl = 3'b000; // AUIPC
